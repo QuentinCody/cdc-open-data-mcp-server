@@ -610,8 +610,6 @@ export interface MaterializationResult {
 // ---------------------------------------------------------------------------
 
 export interface ColumnProfile {
-	/** Column name */
-	name: string;
 	/** Number of NULL values */
 	null_count: number;
 	/** Number of distinct non-null values (capped at 101 to detect high-cardinality) */
@@ -631,7 +629,8 @@ export interface ColumnProfile {
 export interface TableProfile {
 	table: string;
 	row_count: number;
-	columns: ColumnProfile[];
+	/** Column profiles keyed by column name */
+	columns: Record<string, ColumnProfile>;
 }
 
 /** Max distinct values to count before capping */
@@ -660,24 +659,38 @@ export function computeColumnProfiles(
 		const rowCountResult = sql.exec(`SELECT COUNT(*) as c FROM "${table.name}"`).one();
 		const rowCount = Number((rowCountResult as { c: number })?.c ?? 0);
 		if (rowCount === 0) {
-			profiles.push({ table: table.name, row_count: 0, columns: [] });
+			profiles.push({ table: table.name, row_count: 0, columns: {} });
 			continue;
 		}
 
-		const columnProfiles: ColumnProfile[] = [];
+		const columnProfiles: Record<string, ColumnProfile> = {};
 
 		for (const col of table.columns) {
 			// Skip the synthetic parent_id FK — not useful to profile
 			if (col.name === "parent_id") continue;
 
 			const profile = profileColumn(table.name, col, rowCount, sql);
-			columnProfiles.push(profile);
+			columnProfiles[col.name] = profile;
 		}
 
 		profiles.push({ table: table.name, row_count: rowCount, columns: columnProfiles });
 	}
 
 	return profiles;
+}
+
+/** Detect if a string value looks like a URL */
+function isUrlLike(v: unknown): boolean {
+	return typeof v === "string" && /^https?:\/\//.test(v);
+}
+
+/** Detect if a column is a high-cardinality identifier/URL column with no analytical value */
+function isLowValueColumn(col: InferredColumn, distinctCount: number, rowCount: number, sampleValue: unknown): boolean {
+	// URL columns: all unique, no one queries by URL
+	if (distinctCount >= rowCount * 0.9 && isUrlLike(sampleValue)) return true;
+	// _links_* columns are always low-value
+	if (col.name.startsWith("_links_")) return true;
+	return false;
 }
 
 function profileColumn(
@@ -700,14 +713,26 @@ function profileColumn(
 	).one();
 	const rawDistinct = Number((distinctResult as { c: number })?.c ?? 0);
 	const distinctCapped = rawDistinct >= PROFILE_DISTINCT_CAP;
-	const distinctCount = distinctCapped ? rawDistinct : rawDistinct;
+
+	// Peek at one value to check for URL/low-value columns
+	let peekValue: unknown = null;
+	try {
+		const peek = sql.exec(`SELECT ${colRef} as v FROM "${tableName}" WHERE ${colRef} IS NOT NULL LIMIT 1`).one();
+		peekValue = peek?.v;
+	} catch { /* non-critical */ }
+
+	const lowValue = isLowValueColumn(col, rawDistinct, rowCount, peekValue);
 
 	const profile: ColumnProfile = {
-		name: col.name,
 		null_count: nullCount,
-		distinct_count: distinctCount,
+		distinct_count: rawDistinct,
 		...(distinctCapped ? { distinct_capped: true } : {}),
 	};
+
+	// For low-value columns (URLs, _links_*), only report null_count and distinct_count
+	if (lowValue) {
+		return profile;
+	}
 
 	// Min/Max — skip for JSON columns (not meaningful)
 	if (col.type !== "JSON") {
@@ -724,25 +749,27 @@ function profileColumn(
 		}
 	}
 
-	// Sample values — grab a few representative non-null values
-	try {
-		const sampleRows = sql.exec(
-			`SELECT DISTINCT ${colRef} as v FROM "${tableName}" WHERE ${colRef} IS NOT NULL LIMIT ${PROFILE_SAMPLE_COUNT}`,
-		).toArray();
-		if (sampleRows.length > 0) {
-			profile.sample_values = sampleRows.map((r) => {
-				const v = r.v;
-				// Truncate long strings in samples to save context
-				if (typeof v === "string" && v.length > 120) return v.slice(0, 117) + "...";
-				return v as string | number | null;
-			});
+	// Sample values — skip for JSON columns (already have json_shape metadata)
+	if (col.type !== "JSON") {
+		try {
+			const sampleRows = sql.exec(
+				`SELECT DISTINCT ${colRef} as v FROM "${tableName}" WHERE ${colRef} IS NOT NULL LIMIT ${PROFILE_SAMPLE_COUNT}`,
+			).toArray();
+			if (sampleRows.length > 0) {
+				profile.sample_values = sampleRows.map((r) => {
+					const v = r.v;
+					// Truncate long strings in samples to save context
+					if (typeof v === "string" && v.length > 120) return v.slice(0, 117) + "...";
+					return v as string | number | null;
+				});
+			}
+		} catch {
+			// Non-critical
 		}
-	} catch {
-		// Non-critical
 	}
 
 	// Top values — only for low-cardinality columns
-	if (distinctCount <= PROFILE_TOP_VALUES_THRESHOLD && distinctCount > 0) {
+	if (rawDistinct <= PROFILE_TOP_VALUES_THRESHOLD && rawDistinct > 0) {
 		try {
 			const topRows = sql.exec(
 				`SELECT ${colRef} as v, COUNT(*) as c FROM "${tableName}" WHERE ${colRef} IS NOT NULL GROUP BY ${colRef} ORDER BY c DESC LIMIT ${PROFILE_TOP_VALUES_COUNT}`,

@@ -542,10 +542,28 @@ export class RestStagingDO extends DurableObject {
 			}
 			enhanced.push(out);
 		}
+
+		// Truncation support for enhanced queries
+		let totalMatching: number | undefined;
+		let truncated: boolean | undefined;
+		if (body.count_total) {
+			try {
+				const countSql = `SELECT COUNT(*) as c FROM (${stripLimit(body.sql)})`;
+				const countResult = this.ctx.storage.sql.exec(countSql).one();
+				totalMatching = Number((countResult as { c: number })?.c ?? enhanced.length);
+				truncated = totalMatching > enhanced.length;
+			} catch {
+				truncated = undefined;
+				totalMatching = undefined;
+			}
+		}
+
 		return this.jsonResponse({
 			success: true,
 			results: enhanced,
 			row_count: enhanced.length,
+			...(truncated !== undefined ? { truncated } : {}),
+			...(totalMatching !== undefined ? { total_matching: totalMatching } : {}),
 		});
 	}
 
@@ -618,13 +636,11 @@ export class RestStagingDO extends DurableObject {
 			// Non-critical
 		}
 
-		// Build profile lookup: tableName.colName → ColumnProfile
-		const profileLookup = new Map<string, Record<string, unknown>>();
+		// Build profile lookup: tableName → { colName → ColumnProfile }
+		const profileByTable = new Map<string, Record<string, unknown>>();
 		if (columnProfiles) {
 			for (const tp of columnProfiles) {
-				for (const cp of tp.columns) {
-					profileLookup.set(`${tp.table}.${cp.name}`, cp as unknown as Record<string, unknown>);
-				}
+				profileByTable.set(tp.table, tp.columns as unknown as Record<string, unknown>);
 			}
 		}
 
@@ -650,7 +666,8 @@ export class RestStagingDO extends DurableObject {
 				columns: columnResults.map((col: Record<string, unknown>) => {
 					const colName = col.name as string;
 					const meta = columnMeta.get(`${tableName}.${colName}`);
-					const colProfile = profileLookup.get(`${tableName}.${colName}`);
+					const tableProfiles = profileByTable.get(tableName) as Record<string, Record<string, unknown>> | undefined;
+					const colProfile = tableProfiles?.[colName];
 					return {
 						name: colName,
 						type: col.type as string,
