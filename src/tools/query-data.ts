@@ -6,7 +6,7 @@ interface QueryEnv {
 	CDC_DATA_DO?: unknown;
 }
 
-export function registerQueryData(server: McpServer, env?: QueryEnv) {
+export function registerQueryData(server: McpServer, env?: QueryEnv): void {
 	const handler = createQueryDataHandler("CDC_DATA_DO", "cdc");
 
 	server.registerTool(

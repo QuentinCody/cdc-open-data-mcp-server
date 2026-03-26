@@ -13,7 +13,7 @@ interface CdcEnv {
 }
 
 export class MyMCP extends McpAgent {
-	server: any = new McpServer({
+	server = new McpServer({
 		name: "cdc-open-data",
 		version: "0.1.0",
 	});
