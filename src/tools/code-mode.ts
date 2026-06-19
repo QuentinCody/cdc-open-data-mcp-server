@@ -23,6 +23,8 @@ export function registerCodeMode(
 
 	const executeTool = createExecuteTool({
 		prefix: "cdc",
+		// Verifiable provenance: cdc_execute results carry a _meta.citation.
+		source: { id: "cdc", name: "CDC Open Data", url: "https://data.cdc.gov", license: "U.S. Public Domain" },
 		catalog: cdcCatalog,
 		apiFetch,
 		doNamespace: env.CDC_DATA_DO,
