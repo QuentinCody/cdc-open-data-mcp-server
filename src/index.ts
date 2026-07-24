@@ -1,3 +1,4 @@
+import { buildHealthResponse, configureCitationSigning } from "@bio-mcp/shared";
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerQueryData } from "./tools/query-data";
@@ -19,6 +20,8 @@ export class MyMCP extends McpAgent {
 	});
 
 	async init() {
+
+		configureCitationSigning(this.env);
 		const env = this.env as unknown as CdcEnv;
 		registerQueryData(this.server, env);
 		registerGetSchema(this.server, env);
@@ -30,7 +33,7 @@ export default {
 	fetch(request: Request, env: Env, ctx: ExecutionContext) {
 		const url = new URL(request.url);
 		if (url.pathname === "/health") {
-			return new Response("ok", { status: 200, headers: { "content-type": "text/plain" } });
+			return buildHealthResponse("cdc");
 		}
 		if (url.pathname === "/mcp") {
 			return MyMCP.serve("/mcp", { binding: "MCP_OBJECT" }).fetch(request, env, ctx);
