@@ -1,33 +1,25 @@
 import type { ApiFetchFn } from "@bio-mcp/shared/codemode/catalog";
 import { cdcFetch } from "./http";
+import { cdcHttpError, readCdcResponse } from "./read-response";
+import {fail, wastewaterRead} from "./wastewater";
 
 export function createCdcApiFetch(): ApiFetchFn {
 	return async (request) => {
-		const response = await cdcFetch(request.path, request.params);
+		if (request.method !== "GET" || request.body !== undefined) fail("CDC dataset adapters support GET reads");
+        if (request.path.startsWith("/wastewater/")) return {status: 200, data: await wastewaterRead(request.path, request.params ?? {})};
+        const params = request.path === "/discover" ? {domains: "data.cdc.gov", ...request.params} : request.params;
+        const response = await cdcFetch(request.path, params);
 
-		if (!response.ok) {
-			let errorBody: string;
-			try {
-				errorBody = await response.text();
-			} catch {
-				errorBody = response.statusText;
-			}
-			const error = new Error(`HTTP ${response.status}: ${errorBody.slice(0, 200)}`) as Error & {
-				status: number;
-				data: unknown;
-			};
-			error.status = response.status;
-			error.data = errorBody;
-			throw error;
-		}
+		const raw = await readCdcResponse(response);
+		if (!response.ok) cdcHttpError(response, raw);
 
 		const contentType = response.headers.get("content-type") || "";
 		if (!contentType.includes("json")) {
-			const text = await response.text();
-			return { status: response.status, data: text };
+			return { status: response.status, data: raw };
 		}
 
-		const data = await response.json();
+		let data: unknown;
+		try { data = JSON.parse(raw); } catch { fail("CDC response is not JSON", 502, {response: raw, incomplete: true}); }
 		return { status: response.status, data };
 	};
 }

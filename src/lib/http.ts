@@ -1,5 +1,5 @@
-import { restFetch } from "@bio-mcp/shared/http/rest-fetch";
 import type { RestFetchOptions } from "@bio-mcp/shared/http/rest-fetch";
+import { restFetch } from "@bio-mcp/shared/http/rest-fetch";
 
 const CDC_SODA_BASE = "https://data.cdc.gov";
 const DISCOVERY_BASE = "https://api.us.socrata.com/api/catalog/v1";

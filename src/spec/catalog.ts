@@ -1,13 +1,15 @@
 import type { ApiCatalog } from "@bio-mcp/shared/codemode/catalog";
+import {wastewaterEndpoints, wastewaterWorkflows} from "./wastewater";
 
 export const cdcCatalog: ApiCatalog = {
 	name: "CDC Open Data (Socrata)",
 	baseUrl: "https://data.cdc.gov",
 	version: "2.1",
 	auth: "none",
-	endpointCount: 3,
+	endpointCount: 3 + wastewaterEndpoints.length,
+    workflows: wastewaterWorkflows,
 	notes:
-		"- CDC hosts 1,105+ datasets on Socrata covering disease surveillance, mortality, vaccination, chronic disease, and environmental health\n" +
+		"- CDC hosts datasets on Socrata covering disease surveillance, mortality, vaccination, chronic disease, and environmental health\n" +
 		"- Workflow: 1) discover datasets with /discover, 2) inspect schema with /meta/{id}.json, 3) query data with /data/{id}.json\n" +
 		"- Virtual path prefixes route to different upstream APIs:\n" +
 		"  /data/* → data.cdc.gov/resource/* (SODA query API)\n" +
@@ -33,6 +35,7 @@ export const cdcCatalog: ApiCatalog = {
 		"- Rate limit: ~1000 requests/hour without token\n" +
 		"- Results from /data/ are JSON arrays; use $limit to control response size",
 	endpoints: [
+        ...wastewaterEndpoints,
 		{
 			method: "GET",
 			path: "/discover",

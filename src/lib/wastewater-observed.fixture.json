@@ -1,0 +1,10 @@
+{
+  "source_url": "https://data.cdc.gov/resource/atcp-73re.json",
+  "observed_on": "2026-09-28",
+  "capture_note": "First three native records transcribed from the public response returned by the web tool. A partial example, not a complete dataset, byte-exact archive or filtered-query validation.",
+  "rows": [
+    {"state_territory":"Alabama","counties_served":"Jefferson","site":"ID:4","population_served":"30000","source":"WastewaterSCAN","site_wval":"1.0","site_wval_category":"Very Low","date_included_in_wval":"2022-10-21","week_end":"2026-09-19","pathogen_target":"Influenza A virus","date_updated":"2026-09-25 11:01"},
+    {"state_territory":"Alabama","counties_served":"Jefferson","site":"ID:4","population_served":"30000","source":"WastewaterSCAN","site_wval":"1.0","site_wval_category":"Very Low","date_included_in_wval":"2022-10-21","week_end":"2026-09-19","pathogen_target":"RSV","date_updated":"2026-09-25 11:01"},
+    {"state_territory":"Alabama","counties_served":"Jefferson","site":"ID:4","population_served":"30000","source":"WastewaterSCAN","site_wval":"6.57","site_wval_category":"Moderate","date_included_in_wval":"2022-09-23","week_end":"2026-09-19","pathogen_target":"SARS-CoV-2","date_updated":"2026-09-25 11:01"}
+  ]
+}
